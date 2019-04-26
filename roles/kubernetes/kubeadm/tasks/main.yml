@@ -121,6 +121,18 @@
     - kubeadm_discovery_address != kube_apiserver_endpoint
   notify: restart kubelet
 
+- name: Check if kubeadm service drop-in exists
+  stat: path=/etc/systemd/system/kubelet.service.d/10-kubeadm.conf
+  register: systemd_kubeadm_conf
+
+- name: Move kubeadm service drop-in
+  command: mv /etc/systemd/system/kubelet.service.d/10-kubeadm.conf /etc/systemd/system/kubelet.service.d/10-kubeadm.conf.ignore
+  when: systemd_kubeadm_conf.stat.exists
+
+- name: Reload kubelet service
+  command: systemctl daemon-reload
+  notify: restart kubelet
+
 - name: Update server field in kube-proxy kubeconfig
   shell: >-
     {{ bin_dir }}/kubectl --kubeconfig {{ kube_config_dir }}/admin.conf get configmap kube-proxy -n kube-system -o yaml
