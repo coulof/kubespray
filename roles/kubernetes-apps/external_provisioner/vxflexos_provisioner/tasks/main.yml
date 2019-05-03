@@ -1,0 +1,121 @@
+---
+# TODO :
+#  * Test if `helm_enabled`
+#  * Test pre-reqs (e.g. sh verify.kubernetes)
+#  * Uninstall (e.g. https://github.com/dell/csi-vxflexos/blob/master/helm/uninstall.vxflexos)
+#  * Test commands instead of ignore_errors
+
+- name: VxFlexOS Provisioner | Remove legacy addon dir and manifests
+  file:
+    path: "{{ kube_config_dir }}/addons/vxflexos_provisioner"
+    state: absent
+  tags:
+    - upgrade
+
+- name: VxFlexOS Provisioner | Remove legacy namespace
+  shell: |
+    {{ bin_dir }}/kubectl delete namespace {{ vxflexos_provisioner_namespace }}
+  ignore_errors: yes
+  tags:
+    - upgrade
+
+- name: VxFlexOS Provisioner | Remove driver
+  shell: |
+    {{ bin_dir }}/helm delete --purge vxflexos
+  ignore_errors: yes
+  tags:
+    - upgrade
+
+# TODO
+# - name: VxFlexOS Provisioner | Remove legacy storageclass
+#   shell: |
+#     {{ bin_dir }}/kubectl delete storageclass {{ vxflexos_provisioner_storage_class }}
+#   ignore_errors: yes
+#   when:
+#     - inventory_hostname == groups['kube-master'][0]
+#   tags:
+#     - upgrade
+
+# Helm module broken right now
+# - name: VxFlexOS Provisioner | Uninstall helm chart
+#   helm:
+#     host: localhost
+#     state: absent
+#     name: vxflexos
+#     namespace: {{ vxflexos_provisioner_namespace }}
+
+- name: VxFlexOS Provisioner | Create addon dir
+  file:
+    path: "{{ kube_config_dir }}/addons/vxflexos_provisioner"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+
+- name:  VxFlexOS Provisioner | Get VxFlexOS CSI driver Unarchive
+  unarchive:
+    src: https://github.com/dell/csi-vxflexos/archive/v1.0.0.zip
+    dest: "{{ kube_config_dir }}/addons/vxflexos_provisioner"
+    remote_src: yes
+
+- name: VxFlexOS Provisioner | Templates list
+  set_fact:
+    vxflexos_provisioner_templates:
+      - { name: 00-namespace, file: 00-namespace.yml, type: ns }
+      - { name: secret-vxflexos-provisioner, file: secret-vxflexos-provisioner.yml, type: secret }
+
+- name: VxFlexOS Provisioner | Create manifests
+  template:
+    src: "{{ item.file }}.j2"
+    dest: "{{ kube_config_dir }}/addons/vxflexos_provisioner/{{ item.file }}"
+  with_items: "{{ vxflexos_provisioner_templates }}"
+  register: vxflexos_provisioner_manifests
+
+- name: VxFlexOS Provisioner | Apply manifests
+  kube:
+    namespace: "{{ vxflexos_provisioner_namespace }}"
+    kubectl: "{{ bin_dir }}/kubectl"
+    filename: "{{ vxflexos_provisioner_manifests.results | selectattr('skipped', 'undefined') | map(attribute='item') | map(attribute='file') | map('regex_replace', '^(.*)$', kube_config_dir+'/addons/vxflexos_provisioner/\\1') | list }}"
+    state: "latest"
+  when: inventory_hostname == groups['kube-master'][0]
+
+- register: "clusterrolebinding_driver_state"
+  command: "{{bin_dir}}/kubectl get customresourcedefinitions csidrivers.csi.storage.k8s.io -o=name --ignore-not-found=true"
+  when: inventory_hostname == groups['kube-master'][0]
+  changed_when: false
+
+- name: "VxFlexOS Provisioner | Deploy cluster role binding for the driver"
+  command: "{{bin_dir}}/kubectl create -f {{ kube_config_dir }}/addons/vxflexos_provisioner/csi-vxflexos-1.0.0/helm/csidriver.yaml"
+  when: "clusterrolebinding_driver_state.stdout == \"\""
+
+- register: "clusterrolebinding_node_state"
+  command: "{{bin_dir}}/kubectl get customresourcedefinitions csinodeinfos.csi.storage.k8s.io -o=name --ignore-not-found=true"
+  changed_when: false
+
+- name: "VxFlexOS Provisioner | Deploy cluster role binding for the NodeInfo"
+  when: "clusterrolebinding_node_state.stdout == \"\""
+  command: "{{bin_dir}}/kubectl create -f {{ kube_config_dir }}/addons/vxflexos_provisioner/csi-vxflexos-1.0.0/helm/nodeinfo.yaml"
+
+- name: "VxFlexOS Provisioner | Create configuration for the Driver"
+  template:
+    src: "myvalues.yml.j2"
+    dest: "{{ kube_config_dir }}/addons/vxflexos_provisioner/csi-vxflexos-1.0.0/helm/myvalues.yaml"
+
+- name: "VxFlexOS Provisioner | Install the Driver with helm"
+  command: "{{ bin_dir }}/helm install --values {{ kube_config_dir }}/addons/vxflexos_provisioner/csi-vxflexos-1.0.0/helm/myvalues.yaml --name vxflexos --namespace {{ vxflexos_provisioner_namespace }} {{ kube_config_dir }}/addons/vxflexos_provisioner/csi-vxflexos-1.0.0/helm/csi-vxflexos"
+
+# https://github.com/ansible/ansible/issues/37148
+# - name: VxFlexOS Provisioner | Install helm chart a github
+#   helm:
+#     host: localhost
+#     chart:
+#       source:
+#         type: git
+#         location: https://github.com/dell/csi-vxflexos.git
+#         path: helm/csi-vxflexos
+#     state: present
+#     name: vxflexos
+#     namespace: {{ vxflexos_provisioner_namespace }}
+#     values: 
+#       systemName: {{ vxflexos_provisioner_systemname }},
+#       restGateway: {{ vxflexos_provisioner_restgateway }}

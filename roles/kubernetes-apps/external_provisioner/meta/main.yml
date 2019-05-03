@@ -28,3 +28,11 @@ dependencies:
       - apps
       - local-path-provisioner
       - external-provisioner
+  - role: kubernetes-apps/external_provisioner/vxflexos_provisioner
+    when:
+      - vxflexos_provisioner_enabled
+      - inventory_hostname == groups['kube-master'][0]
+    tags:
+      - apps
+      - vxflexos-provisioner
+      - external-provisioner

@@ -4,7 +4,7 @@
 dashboard_enabled: true
 
 # Helm deployment
-helm_enabled: false
+helm_enabled: true
 
 # Registry deployment
 registry_enabled: false
@@ -74,6 +74,24 @@ rbd_provisioner_enabled: false
 # rbd_provisioner_image_features: layering
 # rbd_provisioner_storage_class: rbd
 # rbd_provisioner_reclaim_policy: Delete
+
+# VxFlexOs provisioner deployment
+vxflexos_provisioner_enabled: false
+# vxflexos_provisioner_namespace: 'vxflexos'
+# vxflexos_provisioner_username: 'admin'
+# vxflexos_provisioner_password: 'secret'
+# vxflexos_provisioner_systemname: 'system name'
+# vxflexos_provisioner_restgateway: 'https://192.168.1.1'
+# vxflexos_provisioner_storagepool: 'sp'
+# vxflexos_provisioner_mdmip: '192.168.1.1'
+# vxflexos_provisioner_volumenameprefix: 'k8s'
+# vxflexos_provisioner_controllercount: 1
+# vxflexos_provisioner_vxflexosbinpath: /bin/emc
+# vxflexos_provisioner_enablesnapshotcgdelete: "false"
+# vxflexos_provisioner_enablelistvolumesnapshot: "false"
+# vxflexos_provisioner_storageclass_name: vxflexos
+# vxflexos_provisioner_storageclass_isdefault: "true"
+# vxflexos_provisioner_storageclass_reclaimpolicy: Delete
 
 # Nginx ingress controller deployment
 ingress_nginx_enabled: false
