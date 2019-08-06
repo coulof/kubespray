@@ -28,3 +28,9 @@ dependencies:
       - apps
       - local-path-provisioner
       - external-provisioner
+  - role: kubernetes-apps/external_provisioner/powermax_provisioner
+    when: powermax_provisioner_enabled
+    tags:
+      - apps
+      - powermax-provisioner
+      - external-provisioner

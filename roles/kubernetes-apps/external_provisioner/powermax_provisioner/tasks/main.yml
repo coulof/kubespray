@@ -1,0 +1,134 @@
+---
+# TODO :
+#  * Uninstall (e.g. https://github.com/dell/csi-powermax/blob/master/helm/uninstall.powermax)
+#  * Test commands instead of ignore_errors for helm uninstall
+#  * find a way to not repeat `when: inventory_hostname == groups['kube-master'][0]`
+
+- name: PowerMAX Provisioner | Stop if helm is not enabled
+  assert:
+    that: helm_enabled
+    msg: "PowerMAX CSI Provisioner needs helm for installation"
+  when: inventory_hostname == groups['kube-master'][0]
+
+- name: PowerMAX Provisioner | Install dependency iscsi-initiator-utils
+  package:
+    name: iscsi-initiator-utils
+    state: present
+  become: true
+
+- name: PowerMAX Provisioner | Remove legacy addon dir and manifests
+  file:
+    path: "{{ kube_config_dir }}/addons/powermax_provisioner"
+    state: absent
+  when: inventory_hostname == groups['kube-master'][0]
+  tags:
+    - upgrade
+
+- name: PowerMAX Provisioner | Remove legacy namespace
+  shell: |
+    {{ bin_dir }}/kubectl delete namespace {{ powermax_provisioner_namespace }}
+  ignore_errors: yes
+  when: inventory_hostname == groups['kube-master'][0]
+  tags:
+    - upgrade
+
+- name: PowerMAX Provisioner | Remove driver
+  shell: |
+    {{ bin_dir }}/helm delete --purge powermax
+  ignore_errors: yes
+  when: inventory_hostname == groups['kube-master'][0]
+  tags:
+    - upgrade
+
+# TODO
+# - name: PowerMAX Provisioner | Remove legacy storageclass
+#   shell: |
+#     {{ bin_dir }}/kubectl delete storageclass {{ powermax_provisioner_storage_class }}
+#   ignore_errors: yes
+#   when:
+#     - inventory_hostname == groups['kube-master'][0]
+#   tags:
+#     - upgrade
+
+- name: PowerMAX Provisioner | Create addon dir
+  file:
+    path: "{{ kube_config_dir }}/addons/powermax_provisioner"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  when: inventory_hostname == groups['kube-master'][0]
+
+- name:  PowerMAX Provisioner | Get PowerMAX CSI driver Unarchive
+  unarchive:
+    src: https://github.com/dell/csi-powermax/archive/v1.0.0.zip
+    dest: "{{ kube_config_dir }}/addons/powermax_provisioner"
+    remote_src: yes
+  when: inventory_hostname == groups['kube-master'][0]
+
+- name: PowerMAX Provisioner | Templates list
+  set_fact:
+    powermax_provisioner_templates:
+      - { name: 00-namespace, file: 00-namespace.yml, type: ns }
+      - { name: secret-powermax-provisioner, file: secret-powermax-provisioner.yml, type: secret }
+  when: inventory_hostname == groups['kube-master'][0]
+
+- name: PowerMAX Provisioner | Create manifests
+  template:
+    src: "{{ item.file }}.j2"
+    dest: "{{ kube_config_dir }}/addons/powermax_provisioner/{{ item.file }}"
+  with_items: "{{ powermax_provisioner_templates }}"
+  register: powermax_provisioner_manifests
+  when: inventory_hostname == groups['kube-master'][0]
+
+- name: PowerMAX Provisioner | Apply manifests
+  kube:
+    namespace: "{{ powermax_provisioner_namespace }}"
+    kubectl: "{{ bin_dir }}/kubectl"
+    filename: "{{ powermax_provisioner_manifests.results | selectattr('skipped', 'undefined') | map(attribute='item') | map(attribute='file') | map('regex_replace', '^(.*)$', kube_config_dir+'/addons/powermax_provisioner/\\1') | list }}"
+    state: "latest"
+  when: inventory_hostname == groups['kube-master'][0]
+
+- register: "secretcerts_state"
+  command: "{{bin_dir}}/kubectl get secret powermax-certs -n {{ powermax_provisioner_namespace }} -o=name --ignore-not-found=true"
+  when: inventory_hostname == groups['kube-master'][0]
+  changed_when: false
+
+- name: "PowerMAX Provisioner | Deploy secret certs"
+  command: "{{bin_dir}}/kubectl create -f {{ kube_config_dir }}/addons/powermax_provisioner/csi-powermax-1.0.0/helm/emptysecret.yaml"
+  when:
+    - inventory_hostname == groups['kube-master'][0]
+    - "secretcerts_state.stdout == \"\""
+
+- register: "clusterrolebinding_driver_state"
+  command: "{{bin_dir}}/kubectl get customresourcedefinitions csidrivers.csi.storage.k8s.io -o=name --ignore-not-found=true"
+  when: inventory_hostname == groups['kube-master'][0]
+  changed_when: false
+
+- name: "PowerMAX Provisioner | Deploy cluster role binding for the driver"
+  command: "{{bin_dir}}/kubectl create -f {{ kube_config_dir }}/addons/powermax_provisioner/csi-powermax-1.0.0/helm/csidriver.yaml"
+  when:
+    - inventory_hostname == groups['kube-master'][0]
+    - "clusterrolebinding_driver_state.stdout == \"\""
+
+- register: "clusterrolebinding_node_state"
+  command: "{{bin_dir}}/kubectl get customresourcedefinitions csinodeinfos.csi.storage.k8s.io -o=name --ignore-not-found=true"
+  when: inventory_hostname == groups['kube-master'][0]
+  changed_when: false
+
+- name: "PowerMAX Provisioner | Deploy cluster role binding for the NodeInfo"
+  command: "{{bin_dir}}/kubectl create -f {{ kube_config_dir }}/addons/powermax_provisioner/csi-powermax-1.0.0/helm/nodeinfo.yaml"
+  when:
+    - inventory_hostname == groups['kube-master'][0]
+    - "clusterrolebinding_node_state.stdout == \"\""
+
+- name: "PowerMAX Provisioner | Create configuration for the Driver"
+  template:
+    src: "myvalues.yml.j2"
+    dest: "{{ kube_config_dir }}/addons/powermax_provisioner/csi-powermax-1.0.0/helm/myvalues.yaml"
+  when: inventory_hostname == groups['kube-master'][0]
+
+- name: "PowerMAX Provisioner | Install the Driver with helm"
+  command: "{{ bin_dir }}/helm install --values {{ kube_config_dir }}/addons/powermax_provisioner/csi-powermax-1.0.0/helm/myvalues.yaml --name powermax --namespace {{ powermax_provisioner_namespace }} {{ kube_config_dir }}/addons/powermax_provisioner/csi-powermax-1.0.0/helm/csi-powermax"
+  when: inventory_hostname == groups['kube-master'][0]
+

@@ -78,6 +78,7 @@
     - { role: kubespray-defaults}
     - { role: kubernetes/kubeadm, tags: kubeadm}
     - { role: network_plugin, tags: network }
+    - { role: kubernetes-apps/external_provisioner/powermax_provisioner, tags: powermax-provisioner }
 
 - hosts: kube-master[0]
   any_errors_fatal: "{{ any_errors_fatal | default(true) }}"

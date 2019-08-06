@@ -1,0 +1,78 @@
+# "unisphere" defines the Unisphere endpoint, with full URL, typically leveraging HTTPS.
+# You must set this for your Unisphere instance.
+unisphere: {{ powermax_provisioner_unisphere }}
+
+# clusterPrefix defines a prefix that is appended onto all resources created in the Array
+# This should be unique per K8s/CSI deployment
+# maximum length of this value is 3 characters
+clusterPrefix: {{ powermax_provisioner_clusterprefix }}
+
+# volumeNamePrefix defines a prefix that is prepended to volumes.
+# THIS MUST BE ALL LOWER CASE.
+volumeNamePrefix: {{ powermax_provisioner_volumenameprefix }}
+
+# "controllerCount" defines the number of PowerMax controller nodes to deploy to
+# the Kubernetes release
+controllerCount: {{ powermax_provisioner_controllercount }}
+
+# "portGroups" defines the set of existing port groups that the driver will use
+# command separated list of portgroup names
+portGroups: {{ powermax_provisioner_portgroups }}
+
+# "arrayWhitelist", if set, defines a set of arrays that will be exposed via the CSI Driver
+# if set to an empty string, all arrays known to Unisphere will be exposed
+# command separated list of array serial numbers
+arrayWhitelist: "{{ powermax_provisioner_arraywhitelist }}"
+
+# "grpcMaxThreads" is an integer string which sets the maximum number of current grpc
+# requests that will be configured. Don't change this unless directed to do so by support.
+grpcMaxThreads: "4"
+
+# "powerMaxInsecure" determines if the driver is going to validate unisphere certs while
+# connecting to the Unisphere RESTAPI interface
+# If it is set to false, then a secret powermax-certs has to be created with a X.509 certificate of CA
+# which signed the Unisphere certificate
+powerMaxInsecure: "{{ powermax_provisioner_powermaxinsecure }}"
+
+# "powerMaxDebug" enables low level and http traffic logging between the CSI driver and Unisphere.
+# Do not enable this unless asked to do so by the support team.
+powerMaxDebug: "false"
+
+# The installation process will generate multiple storageclasses based on these parameters.
+# Only the primary storageclass for the driver will be marked default if specified.
+storageClass:
+  # "storageClass.name" defines the name of the storage class to be defined.
+  name: {{ powermax_provisioner_storageclass_name }}
+
+  # "storageClass.symmetrixID" must be set to the default Symmetrix ID to be used
+  symmetrixID: "{{ powermax_provisioner_storageclass_symmetrixid }}"
+
+  # "storageClass.storageResourcePool" must be set to the default Storage Resource Pool to be used
+  storageResourcePool: {{ powermax_provisioner_storageclass_storageresourcepool }}
+
+  # "storageClass.serviceLevel" must be set to the default Service Level to be used"
+  serviceLevel: {{ powermax_provisioner_storageclass_servicelevel }}
+
+  # "storageClass.isDefault" defines whether the primary storage class should be the # default.
+  isDefault: "{{ powermax_provisioner_storageclass_isdefault }}"
+
+  # "storageClass.reclaimPolicy" defines what will happen when a volume is
+  # removed from the Kubernetes API. Valid values are "Retain" and "Delete".
+  reclaimPolicy: {{ powermax_provisioner_storageclass_reclaimpolicy }}
+
+# IT IS RECOMMENDED YOU DO NOT CHANGE THE IMAGES TO BE DOWNLOADED.
+images:
+  # "images.driver" defines the container images used for the driver container.
+  driver: dellemc/csi-powermax:v1.0.0.000R
+
+  # "images.attacher" defines the container images used for the csi attacher
+  attacher: quay.io/k8scsi/csi-attacher:v1.0.1
+
+  # "images.provisioner" defines the container images used for the csi provisioner
+  provisioner: quay.io/k8scsi/csi-provisioner:v1.0.1
+
+  # "images.snapshotter" defines the container image used for the csi snapshotter
+  snapshotter: quay.io/k8scsi/csi-snapshotter:v1.0.1
+
+  # "images.registrar" defines the container images used for the csi registrar
+  registrar: quay.io/k8scsi/csi-node-driver-registrar:v1.0.2
